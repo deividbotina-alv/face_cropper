@@ -65,7 +65,7 @@ class face_cropper_MMSE():
 
 
     def detect_face(self, net, frame):
-        blob = cv2.dnn.blobFromImage(cv2.resize(frame, (300, 300)), 1.0,
+        blob = cv2.dnn.blobFromImage(cv2.resize(frame, (300, 300)), 1.0,#image,scalefactor,size
                                      (300, 300), (104.0, 177.0, 123.0))
         
         net.setInput(blob)
@@ -86,6 +86,14 @@ class face_cropper_MMSE():
             best_detection = detections[0, 0, i, 3:7]
             
             return (maxConfidence, best_detection)
+        
+    def get_frames_names(self,sujbect_path): #counf frames in one subject folder
+            n_framesL = []
+            for file in os.listdir(sujbect_path):
+                if file.endswith(".jpg"):
+                    n_framesL.append(join(sujbect_path,file))
+            n_framesL = np.array(natsorted(n_framesL))
+            return n_framesL
 
     # Return crop image according to the box
     def crop_image(self,frame, box):
@@ -104,25 +112,26 @@ class face_cropper_MMSE():
     def crop_NetFromCaffe(self,new_dimensions):
         print('Cropping faces by Network from caffe...')
         net = cv2.dnn.readNetFromCaffe(join(self.filespath,"deploy.prototxt.txt"),join(self.filespath,"res10_300x300_ssd_iter_140000.caffemodel"))
+            # Start report of current dataset
+        self.report_TXT(join(self.SavePath,'Dataset_Report.txt'),
+                        "[INFO] Face cropping report of dataset in " + self.LoadPath + '\n')
         # Crop faces subject by subject
         for i in range(0,len(self.datapath)):# Number of subjects
-            is_crop_img = False
-            has_to_detect_face = True            
+            unusual_subject = False #Flag refering to wether all faces were found and cropped properly in all frames
+            has_to_detect_face = True
             initBB = None # initialize the bounding box coordinates of the object we are going to track
             subject = self.datapath[i].split(os.path.sep)[-2]+'_'+self.datapath[i].split(os.path.sep)[-1]
             if not os.path.exists(join(self.SavePath,subject)): os.makedirs(join(self.SavePath,subject))
+            print('[INFO] Subject: '+ subject)
             # Start report in current subject
             self.report_TXT(join(self.SavePath,subject,'Report.txt'),
                             "[INFO] This file corresponds to " + subject +
                             ".\nIt save problematic frames. If it is empty, each frame should be good.\n\n")
             # Count number of images in current subject
-            n_framesL = []
-            for file in os.listdir(self.datapath[i]):
-                if file.endswith(".jpg"):
-                    n_framesL.append(join(self.datapath[i],file))
-            n_framesL = np.array(natsorted(n_framesL))
+            n_framesL = self.get_frames_names(self.datapath[i])
 
-            for j in range(0,len(n_framesL)):#Number of images in this subject
+            for j in range(0,len(n_framesL)):#Number of frames in this subject
+                is_crop_img = False # Flag refering to 
                 current_frame_jpg = n_framesL[j].split(os.path.sep)[-1]
                 current_frame_png = current_frame_jpg.split('.')[0]+'.png'
                 try: # Does the current frame exist in saving path?
@@ -130,7 +139,7 @@ class face_cropper_MMSE():
                     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) #Just to see if exist or not
                     continue
                 except: #if it does not exist, crop the face and save it
-                    try: 
+                    try: # Try to find the face in current frame, crop, resize and save it
                         frame = cv2.imread(join(self.datapath[i],current_frame_jpg))
                         #Get size of frame
                         (H, W) = frame.shape[:2]
@@ -164,6 +173,7 @@ class face_cropper_MMSE():
                                 
                                 has_to_detect_face = False
                                 print("[INFO] Face found")
+
                         # 2) IF WE KNOW WHERE THE FACE IS, USE THE TRACKER
                         else: #hast_to_detect_face = False
                             (success, box) = tracker.update(frame)
@@ -191,22 +201,40 @@ class face_cropper_MMSE():
                         if self.SHOW:
                             cv2.imshow("Frame", frame)
                         
-                        # CROP FACE FOUND
-                        if is_crop_img:
-                            (crop_width, crop_height) = crop_img.shape[:2]
-                            if crop_width > 0 and crop_height > 0:
-                                if self.SHOW:
-                                    cv2.imshow("crop", crop_img)
-                                # Resize face
-                                crop_img = cv2.resize(crop_img, new_dimensions, interpolation = cv2.INTER_AREA)
-                                cv2.imwrite(join(self.SavePath,subject,current_frame_png), crop_img)
-                                if maxConfidence < self.critical_confidence:
-                                    self.report_TXT(join(self.SavePath,subject,'Report.txt'),
-                                                    "[WARNING] Frame " + current_frame_png + " maxConfidence: "+ str(maxConfidence)+"\n")
+                        # IF CROP FACE FOUND AND DIMMENSIONS ARE GOOD
+                        if is_crop_img and crop_img.shape[0]>0 and crop_img.shape[1]>0:
+                            if self.SHOW:
+                                cv2.imshow("crop", crop_img)
+                            # Resize face
+                            crop_img = cv2.resize(crop_img, new_dimensions, interpolation = cv2.INTER_AREA)
+                            cv2.imwrite(join(self.SavePath,subject,current_frame_png), crop_img)
+                            if maxConfidence < self.critical_confidence:
+                                self.report_TXT(join(self.SavePath,subject,'Report.txt'),
+                                                "[WARNING] Frame " + current_frame_jpg + " maxConfidence: "+ str(maxConfidence)+"\n")
+                                unusual_subject = True
+                                print("[WARNING] Frame " + current_frame_jpg + " maxConfidence: "+ str(maxConfidence)+"\n")
+
+                        else: # IF WE DIDN'T FIND A RELIABLE FACE, JUST SAVE AN EMPTY IMAGE TO PRESERVE THE SAME NUMBER OF FRAMES IN THE SUBJECT
+                            empty = np.zeros(new_dimensions,dtype=float)
+                            crop_img = cv2.merge((empty,empty,empty))
+                            cv2.imwrite(join(self.SavePath,subject,current_frame_png), crop_img)
+                            self.report_TXT(join(self.SavePath,subject,'Report.txt'),
+                                "[ERROR] Frame " + current_frame_jpg + "Error in cropping\n")
+                            unusual_subject = True
+                            print("[ERROR] Frame " + current_frame_jpg + "Error in cropping")
                     except:
                         # report something wrong happened
                         self.report_TXT(join(self.SavePath,subject,'Report.txt'),'ERROR in Frame '+current_frame_jpg.split('.')[0]+'\n')
-
+                        unusual_subject = True
+                        print('[ERROR]in Frame '+current_frame_jpg.split('.')[0])
+                    if j == len(n_framesL)-1: # If last frame
+                        if unusual_subject: #If either of the current subject's frames went wrong:
+                             self.report_TXT(join(self.SavePath,'Dataset_Report.txt'),
+                                     "Subject " + subject + ': Unusual frames\n')
+                        else:# If all current subject's frames were fine:
+                             self.report_TXT(join(self.SavePath,'Dataset_Report.txt'),
+                                     "Subject " + subject + ': OK\n')
+                             
     # Cropp images with OpenCv
     def crop_faces_face_cascadeV1(self,new_dimensions):
         print('Cropping faces by face_cascade...')
@@ -222,6 +250,7 @@ class face_cropper_MMSE():
         for i in range(0,len(self.datapath)):# Number of subjects
             subject = self.datapath[i].split(os.path.sep)[-2]+'_'+self.datapath[i].split(os.path.sep)[-1]
             if not os.path.exists(join(self.SavePath,subject)): os.makedirs(join(self.SavePath,subject))
+            print('[INFO] Subject: '+ subject)
             
             # Count number of images in current subject
             n_framesL = []

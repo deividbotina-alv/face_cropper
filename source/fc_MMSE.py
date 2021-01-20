@@ -70,7 +70,27 @@ class face_cropper_MMSE():
         fileTXT = open(nameFile,"a")
         fileTXT.write(message)
         fileTXT.close()
-
+        
+    # FUNCTION TO COPY THE ORIGINAL GROUND TRUTH FILES AND PASTE THEM IN SAVE PATH
+    def copy_GT_files(self):
+        # Dataset report
+        print('[CG]Copy and pasting ground truth files...')
+        self.report_TXT(join(self.SavePath,'Dataset_Report.txt'),
+                '\nCOPY AND PASTE GROUND TRUTH FILES\n\n')
+        for path in self.gtpath:# Number of subjects 
+            subject = path.split(os.path.sep)[-2]+'_'+path.split(os.path.sep)[-1] #subject name
+            # Create folder for current subject if it does not exist
+            if not os.path.exists(join(self.SavePath,subject)): os.makedirs(join(self.SavePath,subject))
+            
+            # Copy the respective ground truth with the same name but in .txt file
+            try:
+                sh.copy(join(path,'BP_mmHg.txt'),join(self.SavePath,subject,subject+'.txt'))
+                self.report_TXT(join(self.SavePath,'Dataset_Report.txt'),
+                    'Subject ' + subject + ': GT file OK\n')
+            except:
+                self.report_TXT(join(self.SavePath,'Dataset_Report.txt'),
+                    'Subject ' + subject + ': ERROR saving GT file\n')
+        print('[CG]Process completed')
     # FUNCTION TO DETECT THE FACE IN A SPECIFIC FRAME: Usually used in first frame or whenever the tracker lost the face.
     def detect_face(self, frame):
         
@@ -160,7 +180,7 @@ class face_cropper_MMSE():
 
     def crop_faces(self,new_dimensions):
         
-        print('Cropping faces by Network from caffe...')
+        print('[CF]Cropping faces by Network from caffe...')
         # LOAD CAFFE NETWORK FOR FACE DETECTION
         try:
             self.net = cv2.dnn.readNetFromCaffe(join(self.filespath,"deploy.prototxt.txt"),join(self.filespath,"res10_300x300_ssd_iter_140000.caffemodel"))
@@ -308,83 +328,19 @@ class face_cropper_MMSE():
                                      "Subject " + subject + ': ' + str(count_unusual) + '/' + str(len(n_framesL))+'  Unusual frames\n')
                         else:# If all current subject's frames were fine:
                              self.report_TXT(join(self.SavePath,'Dataset_Report.txt'),
+                                             
                                      "Subject " + subject + ': OK\n')
-                             
-    # Cropp images with OpenCv
-    def crop_faces_face_cascadeV1(self,new_dimensions):
-        print('Cropping faces by face_cascade...')
-        rPPG = []
-        bbox_list = []
-        try: 
-            faceCascade = cv2.CascadeClassifier(os.path.join(self.filespath,'haarcascade_frontalface_default.xml'))
-        except:
-            print('ERROR: '+os.path.join(self.filespath,'haarcascade_frontalface_default.xml')+' not found')
-            sys.exit()
-
-        # Crop faces subject by subject
-        for i in range(0,len(self.datapath)):# Number of subjects
-            subject = self.datapath[i].split(os.path.sep)[-2]+'_'+self.datapath[i].split(os.path.sep)[-1]
-            if not os.path.exists(join(self.SavePath,subject)): os.makedirs(join(self.SavePath,subject))
-            print('[INFO] Subject: '+ subject)
-            
-            # Count number of images in current subject
-            n_framesL = []
-            for file in os.listdir(self.datapath[i]):
-                if file.endswith(".jpg"):
-                    n_framesL.append(join(self.datapath[i],file))
-            n_framesL = np.array(natsorted(n_framesL))
-
-            for j in range(0,len(n_framesL)):#Number of images in this subject
-                current_frame_jpg = n_framesL[j].split(os.path.sep)[-1]
-                current_frame_png = current_frame_jpg.split('.')[0]+'.png'
-                try: # Does the current frame exist in saving path?
-                    img = cv2.imread(join(self.SavePath,subject,current_frame_png))
-                    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) #Just to see if exist or not
-                    continue
-                except: #if it does not exist, crop the face and save it
-                    try: # Try to save face and save
-                        img = cv2.imread(join(self.datapath[i],current_frame_jpg))
-                        face_box = faceCascade.detectMultiScale(
-                            img,
-                            scaleFactor=1.1,
-                            minNeighbors=5,
-                            minSize=(30, 30),
-                            flags = cv2.CASCADE_SCALE_IMAGE
-                        )
-                        # Take only the first face founded
-                        if len(face_box) > 1:
-                            face_box = np.resize(face_box[0],(1,4)).copy()
-        
-                        # Crop face founded
-                        (x, y, w, h) = (face_box[0,0],face_box[0,1],face_box[0,2],face_box[0,3])
-        
-                        maxLength = max(h, w)
-                        x -= int((maxLength-w)/2)
-                        y -= int((maxLength-h)/2)
-                        h = maxLength
-                        w = maxLength
-    
-                        crop_img = copy.deepcopy(img[y:y+h, x:x+w])
-                        # Resize face
-                        crop_img = cv2.resize(crop_img, new_dimensions, interpolation = cv2.INTER_AREA)
-                        # Save current face
-                        cv2.imwrite(join(self.SavePath,subject,current_frame_png), crop_img)
-                        # report save img succesfully
-                        self.report_TXT(join(self.SavePath,subject,'report.txt'),'Frame '+ current_frame_jpg.split('.')[0] +' OK\n')
-
-                    except:
-                        # report something wrong happened
-                        self.report_TXT(join(self.SavePath,subject,'report.txt'),'ERROR in Frame '+current_frame_jpg.split('.')[0]+'\n')
+        print('[CF]Process completed')
 
 
 MMSE = face_cropper_MMSE(loadingPath, savingPath, filespath, SHOW=False)
 MMSE.find_files()
 # Uncomment next line to test one or multiple specific subjetcs
-MMSE.set_files([r'J:\Original_Datasets\MMSE-HR\MMSE-HR\T10_T11_30Subjects\M014\T10',r'J:\Original_Datasets\MMSE-HR\MMSE-HR\first 10 subjects 2D\F013\T8'],
-                [r'J:\Original_Datasets\MMSE-HR\MMSE-HR\T10_T11_30PhyBPHRData\F010\T11',r'J:\Original_Datasets\MMSE-HR\MMSE-HR\first 10 subjects 2D\F013\T8'])
+# MMSE.set_files([r'J:\Original_Datasets\MMSE-HR\MMSE-HR\T10_T11_30Subjects\M014\T10',r'J:\Original_Datasets\MMSE-HR\MMSE-HR\first 10 subjects 2D\F013\T8'],
+#                 [r'J:\Original_Datasets\MMSE-HR\MMSE-HR\T10_T11_30PhyBPHRData\F010\T11',r'J:\Original_Datasets\MMSE-HR\MMSE-HR\first 10 subjects 2D\F013\T8'])
 if not(MMSE.same_number_of_files()):
     print('Error: pathFiles and pathGT must have the same number of files')
     sys.exit()
 else:
-    #MMSE.crop_faces_face_cascadeV1((128,128))
+    MMSE.copy_GT_files()
     MMSE.crop_faces((128,128))

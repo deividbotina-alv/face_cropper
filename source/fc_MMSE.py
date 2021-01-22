@@ -1,11 +1,10 @@
-
 '''
 This cript takes the MMSE-HR dataset and cropp the faces, saving them with their
 respective ground truth files.
 '''
 #%% GLOBAL VARIABLES
 loadingPath = r'J:\Original_Datasets\MMSE-HR\MMSE-HR' # Path where we can find original files
-savingPath = r'J:\faces\MMSE' # Path where faces will be saved
+savingPath = r'J:\faces\original\MMSE' # Path where faces will be saved
 filespath = r'E:\repos\face_cropper\source' #Path with the files needed to run this script
 #%% IMPORTS
 import numpy as np
@@ -20,6 +19,8 @@ import glob
 import sys
 import cv2
 import copy
+
+#%% CLASSES AND FUNCTIONS
 
 class face_cropper_MMSE():
     # CONSTRUCTOR
@@ -84,7 +85,7 @@ class face_cropper_MMSE():
             
             # Copy the respective ground truth with the same name but in .txt file
             try:
-                sh.copy(join(path,'BP_mmHg.txt'),join(self.SavePath,subject,subject+'.txt'))
+                sh.copy(join(path,'BP_mmHg.txt'),join(self.SavePath,subject,subject+'_gt.txt'))
                 self.report_TXT(join(self.SavePath,'Dataset_Report.txt'),
                     'Subject ' + subject + ': GT file OK\n')
             except:
@@ -332,6 +333,7 @@ class face_cropper_MMSE():
                                      "Subject " + subject + ': OK\n')
         print('[CF]Process completed')
 
+#%% MAIN
 
 MMSE = face_cropper_MMSE(loadingPath, savingPath, filespath, SHOW=False)
 MMSE.find_files()
@@ -343,4 +345,4 @@ if not(MMSE.same_number_of_files()):
     sys.exit()
 else:
     MMSE.copy_GT_files()
-    MMSE.crop_faces((128,128))
+    #MMSE.crop_faces((128,128))

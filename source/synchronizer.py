@@ -257,10 +257,6 @@ class synchronize_faces():
             else:
                 print('Files for Subject {} do not correspond. Face:{},GT:{},rppg:{}'.format(i,name_subject_face,name_subject_GT,name_subject_rppg))
                 continue
-            
-
-        
-
 
 #%% MAIN
 

@@ -9,10 +9,10 @@ rank between 20-50 because the ground truth signal acquisition failed in first 2
 '''
 
 #%% GLOBAL VARIABLES
-PathL_Face = r'J:\faces\original\MMSE'# Path to load dataset with faces
-PathL_GT = r'J:\faces\original\MMSE'# Path to load dataset with ground truth files
+PathL_Face = r'J:\faces\128_128\original\MMSE'# Path to load dataset with faces
+PathL_GT = r'J:\faces\128_128\original\MMSE'# Path to load dataset with ground truth files
 PathL_rPPG = r'J:\POS_traces\MMSE-HR\filter'# Path to load dataset with rPPG files
-PathS_Faces = r'J:\faces\synchronized\MMSE'# Path to save faces aligned
+PathS_Faces = r'J:\faces\128_128\synchronized\MMSE'# Path to save faces aligned
 MinimumSizeVideoInSeconds = 15 # Ouputs with duration less than this value will be ignored
 #%% IMPORTS
 import numpy as np
@@ -97,7 +97,13 @@ class synchronize_faces():
     # FLAG REFERING TO WETHER THE NUMBER OF GROUND TRUTH FILES, FACES FOLDERS, AND RPPG FILES ARE THE SAME
     def same_number_of_faces_GT_rPPG(self):
         return np.size(self.faces_list) == np.size(self.GT_list) == np.size(self.rPPG_list)
-    
+
+    # FUNCTION TO SET ONE (OR MORE) SPECIFIC SUBJECTS
+    def set_subject(self,PathL_Face,PathL_GT,PathL_rPPG):
+        self.faces_list = PathL_Face
+        self.GT_list = PathL_GT
+        self.rPPG_list = PathL_rPPG
+        
     # FUNCTION TO LOAD GT FILE + POSPROCESSING
     def load_GT(self,path):
         if self.dataset.upper()=='MMSE':
@@ -105,15 +111,7 @@ class synchronize_faces():
             gt = np.loadtxt(path); #pltnow(gt,val=1,fr=1000)
             # Resample GT from 1000 Hz to 25 Hz (rPPG sample frequency)
             gt = resample_by_interpolation(gt, input_fs=self.fr_gt, output_fs=25)# pltnow(gt,val=1,fr=25)
-            # Center ground truth in 0
-            gt = gt-np.mean(gt)# pltnow(gt,val=1,fr=25)
-            # Detrend signal
-            gt = detrendsignal(gt) # pltnow(gt,val=1,fr=25)
-            # smooth the signal
-            gt = smooth(gt, window_len=5, window='flat') # pltnow(gt,val=1,fr=25)
-            # Normalize between [-1,1]
-            gt = normalize(gt);gt = np.resize(gt,gt.size) # pltnow(gt,val=1,fr=25)
-            
+
         elif self.dataset.upper()=='VIPL':
             pass
         elif self.dataset.upper()=='COHFACE':
@@ -128,21 +126,14 @@ class synchronize_faces():
         m = sio.loadmat(path)
         t = m['timeTrace'];t=np.resize(t,(t.shape[1],))
         pulseTrace = m['pulseTrace']; pulseTrace=np.resize(pulseTrace,(pulseTrace.shape[1],))#pltnow(pulseTrace,val=1,fr=25)
-        # Center ground truth in 0
-        pulseTrace = pulseTrace-np.mean(pulseTrace)# pltnow(pulseTrace,val=1,fr=25)
-        # Detrend signal
-        pulseTrace = detrendsignal(pulseTrace) # pltnow(pulseTrace,val=1,fr=25)
-        # smooth the signal
-        pulseTrace = smooth(pulseTrace, window_len=5, window='flat') # pltnow(pulseTrace,val=1,fr=25)
+
         # Band Pass filter and re-aligment because after bandpass the signal moves a little bit
         # BP = butter_bandpass_filter(pulseTrace, lowcut=0.7, highcut=3.5, fs=25, order=8)
         # ROI_ini = 0 # begin in 0 seconds
         # ROI_end = ROI_ini+(5/0.04) # finish 5 seconds latter        
         # s2 = phase_align(pulseTrace, BP, [ROI_ini,ROI_end])# align by phase
         # pulseTrace = np.roll(BP, int(s2))#
-        
-        # Normalize between [-1,1]
-        pulseTrace = normalize(pulseTrace);pulseTrace = np.resize(pulseTrace,pulseTrace.size) # pltnow(pulseTrace,val=1,fr=25)
+
         return pulseTrace
     
     # FUNCTION TO LOAD THE INDEX OF THE FRAMES OF ONE FACES FOLDER
@@ -150,7 +141,7 @@ class synchronize_faces():
         faces_idx = []
         for root, dirs, files in os.walk(path):
             for name in files:
-                if name.endswith(('.png')):
+                if name.endswith(('.png','.jpg')):
                     faces_idx.append(name)
         return np.array(natsorted(faces_idx))
 
@@ -191,24 +182,36 @@ class synchronize_faces():
             faces_idx = faces_idx[cut_ini:cut_end]
         #pltnow(rPPG,GT,val=2,fr=25)
         
-        if rPPG.size*1/self.fr_rppg<self.MinLengthInSec:#If signals is less than 5 seconds:
+        if rPPG.size*1/self.fr_rppg<self.MinLengthInSec:#If signals is less than MinLengthInSec seconds:
             self.report_TXT(join(self.PathS_Faces,'Dataset_Report.txt'),'[ERROR]: size is {}, (less than {} seconds)\n'.format(rPPG.size*1/self.fr_rppg,self.MinLengthInSec))
             print('[ERROR]: size is {}, (less than {} seconds)'.format(rPPG.size*1/self.fr_rppg,self.MinLengthInSec))
             faces_idx = []
             new_faces_idx = []
             flag_Valid = False
-        else:
+        else: # If the signal has a good size, do preprocessing in reliable segment
             # Synchronize rPPG in GT, the same shift must be aplied in faces_idx
             ROI_ini = 0*self.fr_rppg # begin in first 0 seconds
             ROI_end = ROI_ini+(5*self.fr_rppg)#finish 5 seconds latter
+            # Center ground truth and rPPG in 0
+            GT = GT-np.mean(GT)# pltnow(GT,val=1,fr=25)
+            rPPG = rPPG-np.mean(rPPG)# pltnow(rPPG,val=1,fr=25)
+            # Detrend signal
+            GT = detrendsignal(GT) # pltnow(GT,val=1,fr=25)
+            rPPG = detrendsignal(rPPG) # pltnow(rPPG,val=1,fr=25)
+            # smooth the signal
+            GT = smooth(GT, window_len=5, window='flat') # pltnow(GT,val=1,fr=25)
+            rPPG = smooth(rPPG, window_len=5, window='flat') # pltnow(rPPG,val=1,fr=25)
+            # Normalize between [-1,1]
+            GT = normalize(GT);GT = np.resize(GT,GT.size) # pltnow(GT,val=1,fr=25)
+            rPPG = normalize(rPPG);rPPG = np.resize(rPPG,rPPG.size) # pltnow(rPPG,val=1,fr=25)
+            # GT alignment on rPPG
             #pltnow(GT[int(ROI_ini):int(ROI_end)],rPPG[int(ROI_ini):int(ROI_end)],2)
-            s1 = phase_align(GT, rPPG, [ROI_ini,ROI_end])# align by phase
-            rPPG = np.roll(rPPG, int(s1)) # pltnow(rPPG,GT,val=2,fr=25)
-            new_faces_idx = np.roll(faces_idx, int(s1)) # we apply the same shift in frames
+            s1 = phase_align(rPPG, GT, [ROI_ini,ROI_end])# align by phase
+            GT = np.roll(GT, int(s1)) # pltnow(rPPG,GT,val=2,fr=25)
             self.report_TXT(join(self.PathS_Faces,'Dataset_Report.txt'),'Shifted {:0.2f} frames, ({:0.2f} seconds)\n'.format(s1,s1*1/self.fr_rppg))
             print('Shifted {:0.2f} frames, ({:0.2f} seconds)'.format(s1,s1*1/self.fr_rppg))
 
-        return faces_idx,new_faces_idx,GT,flag_Valid #GT may changed
+        return faces_idx,GT,flag_Valid #GT may changed
 
     # FUNCTION TO SYNCHRONIZE FACES WITH GROUND TRUTH, USING ALINMENT BETWEEN RPPG AND GT FILES
     # ALSO A SELECTION OF ONLY RELIABLE PARTS OF EACH SUBJECT BASED IN THE GROUND TRUTH IS DONE.
@@ -241,11 +244,11 @@ class synchronize_faces():
                 # number of frames in "faces_idx" must be the same found in "rPPG" since rPPG was taken from the same video
                 if len(rPPG)==len(faces_idx):
                     GT = self.load_GT(self.GT_list[i]) # Load GT signal ready to be compared. pltnow(GT,rPPG,val=3,fr=25)
-                    old_idx,new_idx,newGT,valid = self.SincronizameEsta(name,rPPG,GT,faces_idx,cuting)
+                    frame_idx,newGT,valid = self.SincronizameEsta(name,rPPG,GT,faces_idx,cuting)
                     if valid: # If subject had a valid length, save it.
-                        for j in range(0,len(old_idx)):
-                            old_frame = cv2.imread(join(self.PathL_Face,name,new_idx[j]))
-                            cv2.imwrite(join(self.PathS_Faces,name,old_idx[j]), old_frame)
+                        for j in range(0,len(frame_idx)):
+                            current_frame = cv2.imread(join(self.PathL_Face,name,frame_idx[j]))
+                            cv2.imwrite(join(self.PathS_Faces,name,frame_idx[j]), current_frame)
                         # Finally save new GT file because it may changed
                         self.saveArray_TXT(join(self.PathS_Faces,name,name+'_gt.txt'),[newGT])
                 else:
@@ -264,6 +267,10 @@ MMSE = synchronize_faces(PathL_Face,PathL_GT,PathL_rPPG,PathS_Faces,MinimumSizeV
 MMSE.find_faces_folders()
 MMSE.find_GT_files()
 MMSE.find_rPPG_files()
+# Uncomment next lines to test one specific subject
+# MMSE.set_subject([r'J:\faces\128_128\original\MMSE\F009_T11'],#faces
+#                  [r'J:\faces\128_128\original\MMSE\F009_T11\F009_T11_gt.txt'],#GT
+#                  [r'J:\POS_traces\MMSE-HR\filter\F009_T11_rppg_POS.mat'])#rPPG
 if MMSE.same_number_of_faces_GT_rPPG():
     MMSE.TakeOnlyReliableSegmentAndSynchronize(r'E:\repos\face_cropper\source\removeGT\GT_SignalsToCut_MMSE.xlsx')
 else:

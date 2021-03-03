@@ -217,7 +217,7 @@ class synchronize_faces():
             faces_idx = faces_idx[0:GT.size]
             time = time[0:GT.size]
         #pltnow(rPPG,GT,val=2,fr=25)
-        
+
         # Take only the reliable segment
         self.report_TXT(join(self.PathS_Faces,'Dataset_Report.txt'),'Reliable segment in [{},{}] s.\n'.format(Begin_in_sec,End_in_sec))
         print('Reliable segment in [{},{}] s.'.format(Begin_in_sec,End_in_sec))
@@ -234,9 +234,13 @@ class synchronize_faces():
             faces_idx = faces_idx[cut_ini:cut_end]
             time = time[cut_ini:cut_end]
         #pltnow(rPPG,GT,val=2,fr=25)
+
+        # Start new time vector in 0
+        time = time-time[0]
         
-        if rPPG.size*1/self.fr_rppg<self.MinLengthInSec:#If signals is less than MinLengthInSec seconds:
-            self.report_TXT(join(self.PathS_Faces,'Dataset_Report.txt'),'[ERROR]: size is {}, (less than {} seconds)\n'.format(rPPG.size*1/self.fr_rppg,self.MinLengthInSec))
+        # Take only signals with a length superior of MinLengthInSec
+        if time[-1]<self.MinLengthInSec:#If signals is less than MinLengthInSec seconds:
+            self.report_TXT(join(self.PathS_Faces,'Dataset_Report.txt'),'[ERROR]: size is {}, (less than {} seconds)\n'.format(time[-1],self.MinLengthInSec))
             print('[ERROR]: size is {}, (less than {} seconds)'.format(rPPG.size*1/self.fr_rppg,self.MinLengthInSec))
             faces_idx = []
             time = []
@@ -325,10 +329,22 @@ VIPL.find_GT_files()
 VIPL.find_rPPG_files()
 VIPL.find_time_files()
 # Uncomment next lines to test one specific subject
-# MMSE.set_subject([r'J:\faces\128_128\original\MMSE\F009_T11'],#faces
+# VIPL.set_subject([r'J:\faces\128_128\original\MMSE\F009_T11'],#faces
 #                  [r'J:\faces\128_128\original\MMSE\F009_T11\F009_T11_gt.txt'],#GT
 #                  [r'J:\POS_traces\MMSE-HR\filter\F009_T11_rppg_POS.mat'])#rPPG
 if VIPL.same_number_of_faces_GT_rPPG_time():
     VIPL.TakeOnlyReliableSegmentAndSynchronize(r'E:\repos\face_cropper\source\removeGT\GT_SignalsToCut_VIPL.xlsx')
 else:
     print('Error, different number of files in faces folders, GT files and/or rPPG files')
+
+# CODE FOR REMOVE EMPTY FOLDERS IF NEEDED:
+if 0:
+    PathToRemoveEmptyFolders = PathS_Faces
+    def is_dir_empty(path):
+        with os.scandir(path) as scan:
+            return next(scan, None) is None
+    
+    for root, dirs, files in os.walk(PathToRemoveEmptyFolders):
+        for carpeta in dirs:
+            if os.path.isdir(os.path.join(root,carpeta)) and is_dir_empty(os.path.join(root,carpeta)):
+                os.rmdir(os.path.join(root,carpeta))

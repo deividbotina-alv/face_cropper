@@ -19,7 +19,7 @@ but now in seconds instead of miliseconds.
 PathL_Face = r'J:\faces\128_128\original\VIPL'# Path to load dataset with faces
 PathL_GT = r'J:\faces\128_128\original\VIPL'# Path to load dataset with ground truth files
 PathL_rPPG = r'J:\PVM_traces\nofilter\VIPL-HR'# Path to load dataset with rPPG files
-PathS_Faces = r'J:\faces\128_128\synchronized\VIPL'# Path to save faces aligned
+PathS_Faces = r'J:\faces\128_128\synchronized\VIPL_npy'# Path to save faces aligned
 MinimumSizeVideoInSeconds = 15 # Ouputs with duration less than this value will be ignored
 #%% IMPORTS
 import numpy as np
@@ -36,6 +36,7 @@ import cv2
 import copy
 import pandas as pd
 import scipy.io as sio
+import pickle
 from scipy.interpolate import interp1d
 
 from ubfc_functions import resample_by_interpolation, smooth, detrendsignal, pltnow, normalize, butter_bandpass_filter, phase_align
@@ -272,7 +273,7 @@ class synchronize_faces():
 
     # FUNCTION TO SYNCHRONIZE FACES WITH GROUND TRUTH, USING ALINMENT BETWEEN RPPG AND GT FILES
     # ALSO A SELECTION OF ONLY RELIABLE PARTS OF EACH SUBJECT BASED IN THE GROUND TRUTH IS DONE.
-    def TakeOnlyReliableSegmentAndSynchronize(self,PathL_ExcelFile):
+    def TakeOnlyReliableSegmentAndSynchronize(self,PathL_ExcelFile,png=True):
         # PathL_ExcelFile: Path with the excel file with the subject names and the reliable segments of them
         # Load Excel file with reliable segments of each subject
         cuting = pd.read_excel(PathL_ExcelFile)
@@ -305,9 +306,15 @@ class synchronize_faces():
                     GT = self.load_GT(self.GT_list[i]) # Load GT signal ready to be compared. pltnow(GT,rPPG,val=3,fr=25)
                     frame_idx,newGT,newtime,valid = self.SincronizameEsta(name,rPPG,GT,faces_idx,cuting,time)
                     if valid: # If subject had a valid length, save it.
+                        frames_output = []
                         for j in range(0,len(frame_idx)):
                             current_frame = cv2.imread(join(self.PathL_Face,name,frame_idx[j]))
-                            cv2.imwrite(join(self.PathS_Faces,name,frame_idx[j]), current_frame)
+                            if png:
+                                cv2.imwrite(join(self.PathS_Faces,name,frame_idx[j]), current_frame)
+                            frames_output.append(current_frame)
+                        frames_output = np.array(frames_output)
+                        if not(png):
+                            np.save(join(self.PathS_Faces,name,name),frames_output)
                         # Finally save new GT file because it may be changed, and also the timestamp file
                         self.saveArray_TXT(join(self.PathS_Faces,name,name+'_gt.txt'),[newGT])
                         self.saveArray_TXT(join(self.PathS_Faces,name,name+'_timestamp.txt'),[newtime])
@@ -329,11 +336,11 @@ VIPL.find_GT_files()
 VIPL.find_rPPG_files()
 VIPL.find_time_files()
 # Uncomment next lines to test one specific subject
-# VIPL.set_subject([r'J:\faces\128_128\original\MMSE\F009_T11'],#faces
-#                  [r'J:\faces\128_128\original\MMSE\F009_T11\F009_T11_gt.txt'],#GT
-#                  [r'J:\POS_traces\MMSE-HR\filter\F009_T11_rppg_POS.mat'])#rPPG
+# VIPL.set_subject([r'J:\faces\128_128\original\VIPL\p1v1s1'],#faces
+#                   [r'J:\faces\128_128\original\VIPL\p1v1s1\p1v1s1_gt.csv'],#GT
+#                   [r'J:\PVM_traces\nofilter\VIPL-HR\p1v1s1_rppg.csv'])#rPPG
 if VIPL.same_number_of_faces_GT_rPPG_time():
-    VIPL.TakeOnlyReliableSegmentAndSynchronize(r'E:\repos\face_cropper\source\removeGT\GT_SignalsToCut_VIPL.xlsx')
+    VIPL.TakeOnlyReliableSegmentAndSynchronize(r'E:\repos\face_cropper\source\removeGT\GT_SignalsToCut_VIPL.xlsx',png=False)
 else:
     print('Error, different number of files in faces folders, GT files and/or rPPG files')
 

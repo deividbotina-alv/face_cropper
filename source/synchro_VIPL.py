@@ -19,8 +19,9 @@ but now in seconds instead of miliseconds.
 PathL_Face = r'J:\faces\128_128\original\VIPL'# Path to load dataset with faces
 PathL_GT = r'J:\faces\128_128\original\VIPL'# Path to load dataset with ground truth files
 PathL_rPPG = r'J:\PVM_traces\nofilter\VIPL-HR'# Path to load dataset with rPPG files
-PathS_Faces = r'J:\faces\128_128\synchronized\VIPL_npy'# Path to save faces aligned
+PathS_Faces = r'J:\faces\128_128\synchronized\VIPL'# Path to save faces aligned
 MinimumSizeVideoInSeconds = 15 # Ouputs with duration less than this value will be ignored
+png = True # If True we save .png files, if false we save .npy with all frames
 #%% IMPORTS
 import numpy as np
 import matplotlib.pyplot as plt
@@ -340,7 +341,7 @@ VIPL.find_time_files()
 #                   [r'J:\faces\128_128\original\VIPL\p1v1s1\p1v1s1_gt.csv'],#GT
 #                   [r'J:\PVM_traces\nofilter\VIPL-HR\p1v1s1_rppg.csv'])#rPPG
 if VIPL.same_number_of_faces_GT_rPPG_time():
-    VIPL.TakeOnlyReliableSegmentAndSynchronize(r'E:\repos\face_cropper\source\removeGT\GT_SignalsToCut_VIPL.xlsx',png=False)
+    VIPL.TakeOnlyReliableSegmentAndSynchronize(r'E:\repos\face_cropper\source\removeGT\GT_SignalsToCut_VIPL.xlsx',png=png)
 else:
     print('Error, different number of files in faces folders, GT files and/or rPPG files')
 

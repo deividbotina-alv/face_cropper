@@ -19,9 +19,9 @@ but now in seconds instead of miliseconds.
 PathL_Face = r'J:\faces\128_128\original\VIPL'# Path to load dataset with faces
 PathL_GT = r'J:\faces\128_128\original\VIPL'# Path to load dataset with ground truth files
 PathL_rPPG = r'J:\PVM_traces\nofilter\VIPL-HR'# Path to load dataset with rPPG files
-PathS_Faces = r'J:\faces\128_128\synchronized\VIPL'# Path to save faces aligned
+PathS_Faces = r'J:\faces\128_128\synchronized\VIPL_npy2'# Path to save faces aligned
 MinimumSizeVideoInSeconds = 15 # Ouputs with duration less than this value will be ignored
-png = True # If True we save .png files, if false we save .npy with all frames
+png = False # If True we save .png files, if false we save .npy with all frames
 #%% IMPORTS
 import numpy as np
 import matplotlib.pyplot as plt
@@ -300,10 +300,12 @@ class synchronize_faces():
                 faces_idx = self.load_faces_index(self.faces_list[i]) # Get index of frames in current subject
                 rPPG = self.load_rPPG(self.rPPG_list[i]) # Load rPPG ready to be compared
                 time = self.load_time(self.time_list[i])
+                time = time-time[0]
+                time = time[0:len(faces_idx)]#If there are less frames take same number of 
                 # For some reason the POS-rPPG signals has one less value so we duplicate the last one in order to have same length.
                 # rPPG = np.concatenate((rPPG,(rPPG[-1],)),axis=0)
                 # number of frames in "faces_idx" must be the same found in "rPPG" since rPPG was taken from the same video
-                if len(rPPG)==len(faces_idx):
+                if len(rPPG)==len(faces_idx)==len(time):
                     GT = self.load_GT(self.GT_list[i]) # Load GT signal ready to be compared. pltnow(GT,rPPG,val=3,fr=25)
                     frame_idx,newGT,newtime,valid = self.SincronizameEsta(name,rPPG,GT,faces_idx,cuting,time)
                     if valid: # If subject had a valid length, save it.
@@ -321,8 +323,8 @@ class synchronize_faces():
                         self.saveArray_TXT(join(self.PathS_Faces,name,name+'_timestamp.txt'),[newtime])
                 else:
                     self.report_TXT(join(self.PathS_Faces,'Dataset_Report.txt'),
-                        "[ERROR]: rPPG length = {} and number of frames = {}. They should be the same\n".format(len(rPPG),len(faces_idx)))
-                    print('{} has different length in rPPG and frames, skipping.'.format(name))
+                        "[ERROR]: rPPG length = {}, number of frames = {} and time = {}. They should be the same\n".format(len(rPPG),len(faces_idx),len(time)))
+                    print('{} frames, rPPG, and/or time have different length in rPPG and frames, skipping.'.format(name))
                     continue
 
             else:

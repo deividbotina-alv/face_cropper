@@ -19,7 +19,7 @@ but now in seconds instead of miliseconds.
 PathL_Face = r'J:\faces\128_128\original\VIPL'# Path to load dataset with faces
 PathL_GT = r'J:\faces\128_128\original\VIPL'# Path to load dataset with ground truth files
 PathL_rPPG = r'J:\PVM_traces\nofilter\VIPL-HR'# Path to load dataset with rPPG files
-PathS_Faces = r'J:\faces\128_128\synchronized\VIPL_npy2'# Path to save faces aligned
+PathS_Faces = r'J:\faces\128_128\synchronized\VIPL_npy3'# Path to save faces aligned
 MinimumSizeVideoInSeconds = 15 # Ouputs with duration less than this value will be ignored
 png = False # If True we save .png files, if false we save .npy with all frames
 #%% IMPORTS
@@ -301,7 +301,14 @@ class synchronize_faces():
                 rPPG = self.load_rPPG(self.rPPG_list[i]) # Load rPPG ready to be compared
                 time = self.load_time(self.time_list[i])
                 time = time-time[0]
-                time = time[0:len(faces_idx)]#If there are less frames take same number of 
+                # [rPPG,faces_idx] and GT should have same length. Cut last part of the longest one
+                if (time.size > rPPG.size):# if rppg is shorter than gt
+                    time = time[0:rPPG.size]
+                else:# if gt is shorter than rppg
+                    rPPG = rPPG[0:time.size]
+                    faces_idx = faces_idx[0:time.size]
+                
+                #If there are less frames take same number of 
                 # For some reason the POS-rPPG signals has one less value so we duplicate the last one in order to have same length.
                 # rPPG = np.concatenate((rPPG,(rPPG[-1],)),axis=0)
                 # number of frames in "faces_idx" must be the same found in "rPPG" since rPPG was taken from the same video

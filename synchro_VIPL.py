@@ -18,8 +18,8 @@ but now in seconds instead of miliseconds.
 #%% GLOBAL VARIABLES
 PathL_Face = r'J:\faces\128_128\original\VIPL'# Path to load dataset with faces
 PathL_GT = r'J:\faces\128_128\original\VIPL'# Path to load dataset with ground truth files
-PathL_rPPG = r'J:\PVM_traces\nofilter\VIPL-HR'# Path to load dataset with rPPG files
-PathS_Faces = r'J:\faces\128_128\synchronized\VIPL_npy3'# Path to save faces aligned
+PathL_rPPG = r'J:\POS_traces\VIPL-HR\filter_origtimetrace'# Path to load dataset with rPPG files
+PathS_Faces = r'J:\faces\128_128\synchronized\VIPL_npy'# Path to save faces aligned
 MinimumSizeVideoInSeconds = 15 # Ouputs with duration less than this value will be ignored
 png = False # If True we save .png files, if false we save .npy with all frames
 #%% IMPORTS
@@ -103,27 +103,19 @@ class synchronize_faces():
                     self.GT_list.append(join(root,name))
         self.GT_list = np.array(natsorted(self.GT_list))
         
-    # FUNCTION TO FIND RPPG FILES in self.PathL_rPPG
-    def find_rPPG_files(self):
+    # FUNCTION TO FIND RPPG FILES in self.PathL_rPPG IN THIS FILE IT IS ALSO THE TIMESTAMP VALUE
+    def find_rPPG_files(self,METHOD='POS'):
         self.rPPG_list = []
         for root, dirs, files in os.walk(self.PathL_rPPG):
             for name in files:
-                if name.split('.')[0].endswith('_rppg'):
+                if name.split('.')[0].endswith('_rppg'+'_'+METHOD):
                     self.rPPG_list.append(join(root,name))
         self.rPPG_list = np.array(natsorted(self.rPPG_list))
 
-    # FUNCTION TO FIND TIME FILES in self.PathL_timestamp
-    def find_time_files(self):
-        self.time_list = []
-        for root, dirs, files in os.walk(self.PathL_rPPG):
-            for name in files:
-                if name.split('.')[0].endswith('_time'):
-                    self.time_list.append(join(root,name))
-        self.time_list = np.array(natsorted(self.time_list))
         
     # FLAG REFERING TO WETHER THE NUMBER OF GROUND TRUTH FILES, FACES FOLDERS, AND RPPG FILES ARE THE SAME
-    def same_number_of_faces_GT_rPPG_time(self):
-        return np.size(self.faces_list) == np.size(self.GT_list) == np.size(self.rPPG_list) == np.size(self.time_list)
+    def same_number_of_faces_GT_rPPG(self):
+        return np.size(self.faces_list) == np.size(self.GT_list) == np.size(self.rPPG_list)
 
     # FUNCTION TO SET ONE (OR MORE) SPECIFIC SUBJECTS
     def set_subject(self,PathL_Face,PathL_GT,PathL_rPPG):
@@ -155,13 +147,12 @@ class synchronize_faces():
             pulseTrace = m['pulseTrace']; pulseTrace=np.resize(pulseTrace,(pulseTrace.shape[1],))#pltnow(pulseTrace,val=1,fr=25)
         if self.dataset == 'VIPL':
             # For VIPL we took PVM rPPG, .csv file
-            pulseTrace = []
-            with open(path) as f:
-                for row in f:
-                    pulseTrace.append(float(row.split(',')[0]))
-            pulseTrace = np.array(pulseTrace)
+            matFile = sio.loadmat(path)
+            pulseTrace = matFile['pulseTrace']
+            timeTrace = matFile['timeTrace']
+            timeTrace = timeTrace-timeTrace[0,0]#Start from 0
 
-        return pulseTrace
+        return np.squeeze(pulseTrace), np.squeeze(timeTrace)
     
     # FUNCTION TO LOAD THE INDEX OF THE FRAMES OF ONE FACES FOLDER
     def load_faces_index(self,path):
@@ -243,7 +234,7 @@ class synchronize_faces():
         # Take only signals with a length superior of MinLengthInSec
         if time[-1]<self.MinLengthInSec:#If signals is less than MinLengthInSec seconds:
             self.report_TXT(join(self.PathS_Faces,'Dataset_Report.txt'),'[ERROR]: size is {}, (less than {} seconds)\n'.format(time[-1],self.MinLengthInSec))
-            print('[ERROR]: size is {}, (less than {} seconds)'.format(rPPG.size*1/self.fr_rppg,self.MinLengthInSec))
+            print('[ERROR]: size is {}, (less than {} seconds)'.format(time[-1],self.MinLengthInSec))
             faces_idx = []
             time = []
             flag_Valid = False
@@ -285,10 +276,9 @@ class synchronize_faces():
             name_subject_face = self.faces_list[i].split(os.path.sep)[-1]
             name_subject_GT = self.GT_list[i].split(os.path.sep)[-1].split('_gt')[0]
             name_subject_rppg = self.rPPG_list[i].split(os.path.sep)[-1].split('_rppg')[0]
-            name_subject_time = self.time_list[i].split(os.path.sep)[-1].split('_time')[0]
 
             # face frames, GT file, and rPPG file must correspond to the same subject
-            if name_subject_face == name_subject_GT == name_subject_rppg == name_subject_time:
+            if name_subject_face == name_subject_GT == name_subject_rppg:
                 name = name_subject_face # general subject name
                 # Does the current subject output folder exist? if so, skip to the next subject
                 if not os.path.exists(join(self.PathS_Faces,name)):
@@ -298,9 +288,8 @@ class synchronize_faces():
                 print(name)
                 self.report_TXT(join(self.PathS_Faces,'Dataset_Report.txt'),'\n'+name+'\n')
                 faces_idx = self.load_faces_index(self.faces_list[i]) # Get index of frames in current subject
-                rPPG = self.load_rPPG(self.rPPG_list[i]) # Load rPPG ready to be compared
-                time = self.load_time(self.time_list[i])
-                time = time-time[0]
+                rPPG, time = self.load_rPPG(self.rPPG_list[i]) # Load rPPG ready to be compared
+
                 # [rPPG,faces_idx] and GT should have same length. Cut last part of the longest one
                 if (time.size > rPPG.size):# if rppg is shorter than gt
                     time = time[0:rPPG.size]
@@ -343,14 +332,13 @@ class synchronize_faces():
 VIPL = synchronize_faces(PathL_Face,PathL_GT,PathL_rPPG,PathS_Faces,MinimumSizeVideoInSeconds,'VIPL')
 VIPL.find_faces_folders()
 VIPL.find_GT_files()
-VIPL.find_rPPG_files()
-VIPL.find_time_files()
+VIPL.find_rPPG_files('POS')
 # Uncomment next lines to test one specific subject
 # VIPL.set_subject([r'J:\faces\128_128\original\VIPL\p1v1s1'],#faces
 #                   [r'J:\faces\128_128\original\VIPL\p1v1s1\p1v1s1_gt.csv'],#GT
 #                   [r'J:\PVM_traces\nofilter\VIPL-HR\p1v1s1_rppg.csv'])#rPPG
-if VIPL.same_number_of_faces_GT_rPPG_time():
-    VIPL.TakeOnlyReliableSegmentAndSynchronize(r'E:\repos\face_cropper\source\removeGT\GT_SignalsToCut_VIPL.xlsx',png=png)
+if VIPL.same_number_of_faces_GT_rPPG():
+    VIPL.TakeOnlyReliableSegmentAndSynchronize(r'E:\repos\face_cropper\removeGT\GT_SignalsToCut_VIPL.xlsx',png=png)
 else:
     print('Error, different number of files in faces folders, GT files and/or rPPG files')
 

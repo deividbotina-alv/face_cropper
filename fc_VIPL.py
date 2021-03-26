@@ -113,6 +113,24 @@ class face_cropper_VIPL():
                 except:
                     self.report_TXT(join(self.SavePath,'Dataset_Report.txt'),
                         'Subject ' + subject + ': ERROR saving time stamp file\n')
+            elif subject[-1]=='2':
+                try:
+                    #Create timestamp file for souce 2 30fps 
+                    sr = 0.033
+                    video = cv2.VideoCapture(join(path,'video.avi'))
+                    totalframes = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+                    timeTrace = np.zeros(totalframes)
+                    for j in range(0,len(timeTrace)):
+                        timeTrace[j] = j*sr#sr=0.033
+                    text_file = open(join(self.SavePath,subject,subject+'_timestamp.txt'), "w")
+                    for val in timeTrace:                        
+                        text_file.write(f'{int(round(val*1000))}\n')
+                    text_file.close()
+                    self.report_TXT(join(self.SavePath,'Dataset_Report.txt'),
+                        'Subject ' + subject + ': time stamp manually created at 30 hz\n')
+                except:
+                    self.report_TXT(join(self.SavePath,'Dataset_Report.txt'),
+                        'Subject ' + subject + ': ERROR saving time stamp file\n')
         print('[CG]Process completed')
     # FUNCTION TO DETECT THE FACE IN A SPECIFIC FRAME: Usually used in first frame or whenever the tracker lost the face.
     def detect_face(self, frame):
@@ -370,12 +388,13 @@ class face_cropper_VIPL():
 
 VIPL = face_cropper_VIPL(loadingPath, savingPath, filespath, SHOW=False)
 VIPL.find_files()
+# Test with one subject
 # Uncomment next line to test one or multiple specific subjetcs
-# MMSE.set_files([r'J:\Original_Datasets\VIPL-HR\data\p1\v1\source1',r'J:\Original_Datasets\VIPL-HR\data\p1\v1\source1'],
-#                 [r'J:\Original_Datasets\VIPL-HR\data\p1\v1\source2',r'J:\Original_Datasets\VIPL-HR\data\p1\v1\source2'])
+# VIPL.datapath = [r'J:\Original_Datasets\VIPL-HR\data\p1\v1\source2']
+# VIPL.gtpath =  [r'J:\Original_Datasets\VIPL-HR\data\p1\v1\source2']
 if not(VIPL.same_number_of_files()):
     print('Error: pathFiles and pathGT must have the same number of files')
     sys.exit()
 else:
     VIPL.copy_GT_files()
-    VIPL.crop_faces((128,128))
+    #VIPL.crop_faces((128,128))

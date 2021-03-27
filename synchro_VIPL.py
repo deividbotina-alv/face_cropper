@@ -187,7 +187,10 @@ class synchronize_faces():
             gt_time.append(gt_time[-1]+(1/self.fr_gt))# Add one more sample in time
             GT.append(GT[-1])# Add one more sample in value (I just re-use the last value)
         
-        
+        # Check if there are NaN's values in rPPG due to POS algorithm and replace with 0
+        if any(np.isnan(rPPG)):
+            rPPG = np.nan_to_num(rPPG,nan=0).copy()# convert to 0
+                
         f = interp1d(gt_time,GT)
         GT_new = f(time)
         GT = GT_new.copy()

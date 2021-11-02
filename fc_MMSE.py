@@ -5,7 +5,7 @@ respective ground truth files.
 #%% GLOBAL VARIABLES
 loadingPath = r'J:\Original_Datasets\MMSE-HR\MMSE-HR' # Path where we can find original files
 savingPath = r'J:\faces\128_128\original\MMSE' # Path where faces will be saved
-filespath = r'E:\repos\face_cropper\source' #Path with the files needed to run this script
+filespath = r'E:\repos\face_cropper' #Path with the files needed to run this script
 #%% IMPORTS
 import numpy as np
 import matplotlib.pyplot as plt

@@ -19,7 +19,7 @@ but now in seconds instead of miliseconds.
 PathL_Face = r'J:\faces\36_36\original\VIPL'# Path to load dataset with faces
 PathL_GT = r'J:\faces\36_36\original\VIPL'# Path to load dataset with ground truth files
 PathL_rPPG = r'J:\POS_traces\VIPL-HR\filter_origtimetrace'# Path to load dataset with rPPG files
-PathS_Faces = r'J:\faces\36_36\synchronized\VIPL_npy'# Path to save faces aligned
+PathS_Faces = r'J:\faces\36_36\synchronized\VIPL\VIPL_npy'# Path to save faces aligned
 MinimumSizeVideoInSeconds = 15 # Ouputs with duration less than this value will be ignored
 png = False # If True we save .png files, if false we save .npy with all frames
 #%% IMPORTS

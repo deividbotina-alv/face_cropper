@@ -1,14 +1,17 @@
 '''
-This cript takes the VIPL-HR dataset and cropp the faces, saving them with their
+This cript takes the ECG-Fitness dataset and cropp the faces taking the bounding boxes given by the authors, saving them with their
 respective ground truth files.
-2021/10/29:
-    - From 128x128 cropped faces, skin recognition by landmarks
-    - 128x128 resize to 64x64. Also skin maks
+Steps:
+    
 '''
-
+#%% GLOBAL VARIABLES
+loadingPath = r'J:\Original_Datasets\VIPL-HR\data' # Path where we can find original files
+savingPath = r'J:\faces\128_128\original\VIPL' # Path where faces will be saved
+filespath = r'E:\repos\face_cropper\source' #Path with the files needed to run this script
 #%% IMPORTS
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.pyplot import figure,plot,show,legend,pause,title
 import os
 import subprocess
 from os import listdir
@@ -19,7 +22,6 @@ import glob
 import sys
 import cv2
 import copy
-import mediapipe as mp
 
 #%% CLASSES AND FUNCTIONS
 
@@ -385,269 +387,56 @@ class face_cropper_VIPL():
                                      "Subject " + subject + ': OK\n')
         print('[CF]Process completed')
 
-
-class FaceLandMarks():
-    def __init__(self, staticMode=False,maxFace=1, refine_landmarks=False, minDetectionCon=0.5, minTrackCon=0.5):
-        self.staticMode = staticMode
-        self.maxFace =  maxFace
-        self.minDetectionCon = minDetectionCon
-        self.minTrackCon = minTrackCon
-
-        self.mp_drawing = mp.solutions.drawing_utils # To draw landmarks
-        self.mp_face_mesh = mp.solutions.face_mesh # 
-        self.faceMesh = self.mp_face_mesh.FaceMesh(static_image_mode=self.staticMode,
-                                                 max_num_faces=self.maxFace,
-                                                 refine_landmarks=False,
-                                                 min_detection_confidence=self.minDetectionCon,
-                                                 min_tracking_confidence=self.minTrackCon
-                                                 )
-        self.drawSpec = self.mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
-
-    def findFaceLandmark(self, img, draw=False):
-        #to be tuned for mask drawing, but 8% seems ok . I didnot tested in in MSE
-        thickness_percent=8
-
-        imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        imgRGB.flags.writeable = False # To improve performance, optionally mark the image as not writeable to pass by reference
-        results = self.faceMesh.process(imgRGB)
-        imgRGB.flags.writeable = True
-
-        # Draw the pose annotation on the image.
-        imageBGR = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2BGR)
-        
-        imgMask = np.zeros(imageBGR.shape, np.uint8)
-        xmin=ymin=1
-        xmax=ymax=0
-   
-        shape = imageBGR.shape
-        image_rows, image_cols, _ = imageBGR.shape
-        
-        
-        if results.multi_face_landmarks: # If face found and therefore landmarks
-            
-            face_landmarks=results.multi_face_landmarks[0]
-            # GET RELATIVE MAXIMUM AND MINIMUM VALUES
-            for landmark in face_landmarks.landmark:
-    
-                if (landmark.x<xmin):
-                  xmin=landmark.x
-                if (landmark.y<ymin):
-                  ymin=landmark.y
-                if (landmark.x>xmax):
-                   xmax=landmark.x
-                if (landmark.y>ymax):
-                   ymax=landmark.y  
-            
-            relative_xmin = int(xmin * shape[1])
-            if relative_xmin<0: relative_xmin=0
-            relative_ymin = int(ymin * shape[0])
-            if relative_ymin<0: relative_ymin=0
-            relative_xmax = int(xmax * shape[1])
-            if relative_xmax>image_cols+1: relative_xmax=image_cols+1
-            relative_ymax = int(ymax * shape[0])
-            if relative_ymax>image_rows+1: relative_ymax=image_rows+1 
-            
-            # Converte normalized face_landmarks to pixel indexes
-            idx_to_coordinates = {}
-            for idx, landmark in enumerate(face_landmarks.landmark):
-              if ((landmark.HasField('visibility') and
-                   landmark.visibility < mp._VISIBILITY_THRESHOLD) or
-                  (landmark.HasField('presence') and
-                   landmark.presence < mp._PRESENCE_THRESHOLD)):
-                continue
-              landmark_px = self.mp_drawing._normalized_to_pixel_coordinates(landmark.x, landmark.y,
-                                                             image_cols, image_rows)
-              if landmark_px:
-                idx_to_coordinates[idx] = landmark_px
-            
-            # GET FACEMASK
-            myconnections = self.mp_face_mesh.FACEMESH_FACE_OVAL
-            num_landmarks = len(face_landmarks.landmark)
-            k=0
-            longueur=len(myconnections)
-            points=np.zeros((longueur,2),np.int32)
-            maski = np.zeros( (image_rows+2, image_cols+2), np.uint8)
-            gx=0
-            gy=0
-            for connection in myconnections:
-              start_idx = connection[0]
-              end_idx = connection[1]
-              if not (0 <= start_idx < num_landmarks and 0 <= end_idx < num_landmarks):
-                raise ValueError(f'Landmark index is out of range. Invalid connection '
-                                 f'from landmark #{start_idx} to landmark #{end_idx}.')
-              if start_idx in idx_to_coordinates and end_idx in idx_to_coordinates:
-                cv2.line(maski, idx_to_coordinates[start_idx],idx_to_coordinates[end_idx], (255,255,255),1)
-                #cv2.imshow('masque', maski)
-                gx=gx+idx_to_coordinates[start_idx][0]
-                gy=gy+idx_to_coordinates[start_idx][1]
-                if (k<longueur) : points[k]=idx_to_coordinates[start_idx]
-                k=k+1
-                
-            if k!=0:
-                gx = int (gx/k)
-                gy = int (gy/k)
-                cv2.floodFill(imgMask, maski, (gx,gy), (255,255,255));
-                #cv2.imshow('masque', maski)
-                #cv2.imshow('masque', imgMask)           
-
-            # REMOVE EYES, EYEBROWS AND LIPS            
-            if relative_xmin!=relative_xmax and relative_ymin!=relative_ymax:
-            
-                thick=(thickness_percent)*(relative_xmax-relative_xmin)/100;
-                ith=int(thick)
-                drawing_spec = self.mp_drawing.DrawingSpec(color = [0,0,0], thickness=ith, circle_radius=1)
-
-                drawing_spec2 = self.mp_drawing.DrawingSpec(color = [255,255,255], thickness=ith, circle_radius=1)
-                
-                self.mp_drawing.draw_landmarks(
-                    image=imgMask,
-                    landmark_list=face_landmarks,
-                    connections=self.mp_face_mesh.FACEMESH_LEFT_EYE,
-                    landmark_drawing_spec=None,
-                    connection_drawing_spec=drawing_spec)
-                
-                self.mp_drawing.draw_landmarks(
-                    image=imgMask,
-                    landmark_list=face_landmarks,
-                    connections=self.mp_face_mesh.FACEMESH_RIGHT_EYE,
-                    landmark_drawing_spec=None,
-                    connection_drawing_spec=drawing_spec)
-                
-                self.mp_drawing.draw_landmarks(
-                    image=imgMask,
-                    landmark_list=face_landmarks,
-                    connections=self.mp_face_mesh.FACEMESH_LEFT_EYEBROW,
-                    landmark_drawing_spec=None,
-                    connection_drawing_spec=drawing_spec)
-                
-                self.mp_drawing.draw_landmarks(
-                    image=imgMask,
-                    landmark_list=face_landmarks,
-                    connections=self.mp_face_mesh.FACEMESH_RIGHT_EYEBROW,
-                    landmark_drawing_spec=None,
-                    connection_drawing_spec=drawing_spec)
-                   
-                self.mp_drawing.draw_landmarks(
-                    image=imgMask,
-                    landmark_list=face_landmarks,
-                    connections=self.mp_face_mesh.FACEMESH_LIPS,
-                    landmark_drawing_spec=None,
-                    connection_drawing_spec=drawing_spec)
-                  
-                mask_crop=imgMask[relative_ymin:relative_ymax,relative_xmin:relative_xmax]
-                img_crop=imageBGR[relative_ymin:relative_ymax,relative_xmin:relative_xmax]
-
-                if draw:
-                    cv2.imshow('img_crop',img_crop)
-                    cv2.imshow('mask_crop',mask_crop)
-
-                return img_crop, mask_crop                      
-        
-        else: # If face is not detected then return same image and empty mask
-
-            return imageBGR, np.zeros((imageBGR.shape[0],imageBGR.shape[1],3),dtype=np.uint8)
-
-
-def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int=64,SHOW:bool=False):
-    '''
-    Function to take 128x128 synchronized VIPL videos to:
-        1) Detect face by landmarks
-        2) Create boolean mask BoolSkinMask 128x128
-        3) Resize input 128x128 to 64x64 and also BoolSkinMask
-        4) Copy and paste remaining files without modifications
-    '''
-    # Start utils for face landmark detection and drawing
-    DEBUG = False
-    folders = natsorted([x[0] for x in os.walk(loadingPath)][1:])
-    # Iterate all folders
-    for folder in folders:
-        # CREATE FOLDER PER SUBJECT
-        subject = folder.split(os.path.sep)[-1]
-        print(f'=>{subject}')
-        if not(os.path.exists(join(savingPath,subject))): os.makedirs(join(savingPath,subject))  
-        
-        if len(os.listdir(folder)) == 0: 
-            print('Empty folder')
-        else: # If it is not empty then just do it !
-        
-        
-            # DETECT SKIN, RESIZE AND SAVE FRAMES WITH MASKS
-            try:
-                framesORIG = np.load(join(savingPath,subject,subject+'.npy'))
-                BoolSkinMask = np.load(join(savingPath,subject,subject+'_skinmask.npy'))
-            except:
-                detector = FaceLandMarks()
-                framesORIG = np.load(join(folder,subject+'.npy'))
-                framesRESIZED = np.zeros(shape=(framesORIG.shape[0],newsize,newsize,3),dtype=np.uint8)
-                BoolSkinMask = np.zeros(shape=(framesORIG.shape[0],newsize,newsize),dtype=np.bool)
-                for i in range(0,framesORIG.shape[0]):
-                    if DEBUG: print(i)
-                    frameBGR = framesORIG[i,:,:,:]
-                    # FIND FACE AND MASK
-                    frame, mask = detector.findFaceLandmark(frameBGR,draw=False)
-                    #cv2.imshow('face',frame);cv2.imshow('mask',mask)
-                    # RESIZE FACE AND MASK
-                    frameRESIZED = cv2.resize(frame,(newsize,newsize), interpolation = cv2.INTER_AREA)
-                    maskRESIZED = cv2.resize(mask,(newsize,newsize), interpolation = cv2.INTER_AREA)
-                    #cv2.imshow('faceRESIZED',frameRESIZED);cv2.imshow('maskRESIZED',maskRESIZED)
-                    #BoolmaskRESIZED = np.array(maskRESIZED[:,:,0],dtype=bool);plt.figure(),plt.imshow(BoolmaskRESIZED)
-                    framesRESIZED[i,:,:,:] = frameRESIZED
-                    BoolSkinMask[i,:,:] = np.array(maskRESIZED[:,:,0],dtype=bool)
-                    
-                    if SHOW:
-                        img = framesRESIZED[i]
-                        mask = BoolSkinMask[i]
-                        img[~mask,:] = [0,0,0]
-                        cv2.imshow('img',img)
-                
-                np.save(join(savingPath,subject,subject+'.npy'),framesRESIZED)
-                np.save(join(savingPath,subject,subject+'_skinmask.npy'),BoolSkinMask)
-                   
-            # COPY/PASTE GROUND TRUTH FILE
-            try:
-                sh.copy(join(folder,subject+'_gt.txt'),join(savingPath,subject,subject+'_gt.txt'))
-            except:
-                print(f'ERROR savomg {subject}_gt.txt')
-            # COPY/PASTE TIMESTAMP FILE
-            try:
-                sh.copy(join(folder,subject+'_timestamp.txt'),join(savingPath,subject,subject+'_timestamp.txt'))
-            except:
-                print(f'ERROR savomg {subject}_timestamp.txt')                
-         
-    print('end')
+def checkGroundTruthFilesInECGFitness(path:str):
+    '''Plot all Ground truth signals to get the reliable segments for all subjects'''
+    n_frames = 1800 # In
+    # For all subjects
+    time = np.arange(0,(1./30.)*n_frames,(1./30.))# viatom works at 125 Hz
+    for sbj in Subjects:
+        for (dirpath, dirnames, filenames) in os.walk(join(path,sbj)):
+            for folder in dirnames:  
+                GTfile = np.load(join(dirpath,folder,'fakePPG.npy'))
+                figure(1),plt.cla(),title(sbj+'_'+folder),plot(time,GTfile),plt.grid(),show()
+                print(sbj+'_'+folder)
+  
 
 #%% MAIN
-def main():
-    CROP_FACES_FROM_VIDEO = False
-    SKIN_DETECTION_AND_RESIZE_64 = True # 2021/10/29
-    
-    if CROP_FACES_FROM_VIDEO:
-         #%% GLOBAL VARIABLES
-        loadingPath = r'J:\Original_Datasets\VIPL-HR\data' # Path where we can find original files
-        savingPath = r'J:\faces\128_128\original\VIPL' # Path where faces will be saved
-        filespath = r'E:\repos\face_cropper\source' #Path with the files needed to run this script       
-        
-        VIPL = face_cropper_VIPL(loadingPath, savingPath, filespath, SHOW=False)
-        VIPL.find_files()
-        # Test with one subject
-        # Uncomment next line to test one or multiple specific subjetcs
-        # VIPL.datapath = [r'J:\Original_Datasets\VIPL-HR\data\p1\v1\source2']
-        # VIPL.gtpath =  [r'J:\Original_Datasets\VIPL-HR\data\p1\v1\source2']
-        if not(VIPL.same_number_of_files()):
-            print('Error: pathFiles and pathGT must have the same number of files')
-            sys.exit()
-        else:
-            VIPL.copy_GT_files()
-            #VIPL.crop_faces((128,128))
-            
-    elif SKIN_DETECTION_AND_RESIZE_64:
-        loadingPath = r'J:\faces\128_128\synchronized\VIPL_npy'
-        savingPath = r'J:\faces\64_64\synchronized\VIPL_npy'
-        newsize=64
-        SkinDetectionAndResizing(loadingPath,savingPath,newsize,False)
-        
-        
-        pass
 
-if __name__ == "__main__":
-    main()  
+loadingPath = r'J:\Original_Datasets\ECG-Fitness'
+bboxPath = r'J:\Original_Datasets\ECG-Fitness\bbox'
+Subjects = ['00','01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16']
+savingPath = r'J:\faces\128_128\synchronized\ECGFitness'
+SHOW_INDIVIDUAL_PREDICTION = True 
+SHOW_FINAL_PREDICTION = True
+
+checkGroundTruthFilesInECGFitness(loadingPath)
+    
+# CHECK GROUND TRUTH FILES
+# For all subjects
+for sbj in Subjects:
+    for (dirpath, dirnames, filenames) in os.walk(join(loadingPath,sbj)):
+        for folder in dirnames:
+            
+            try:
+                file = np.load(join(dirpath,folder,'fakePPG.npy'))
+                print('Previously saved: '+join(dirpath,folder,'fakePPG.npy'))
+            except:   
+                time,GT_ecg = getECGFromCSVFileECGFitness(join(dirpath,folder),SHOW=False)
+                fakeppg = ECG2PPG_wgan_gp_mimic(ECG2PPGnet,time,GT_ecg,SHOW=False) 
+                # save fakeppg                    
+                np.save(join(dirpath,folder,'fakePPG.npy'),fakeppg.astype(np.float16))
+                print(join(dirpath,folder,'fakePPG.npy'))
+
+
+VIPL = face_cropper_VIPL(loadingPath, savingPath, filespath, SHOW=False)
+VIPL.find_files()
+# Test with one subject
+# Uncomment next line to test one or multiple specific subjetcs
+# VIPL.datapath = [r'J:\Original_Datasets\VIPL-HR\data\p1\v1\source2']
+# VIPL.gtpath =  [r'J:\Original_Datasets\VIPL-HR\data\p1\v1\source2']
+if not(VIPL.same_number_of_files()):
+    print('Error: pathFiles and pathGT must have the same number of files')
+    sys.exit()
+else:
+    VIPL.copy_GT_files()
+    #VIPL.crop_faces((128,128))

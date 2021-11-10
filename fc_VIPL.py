@@ -403,7 +403,13 @@ class FaceLandMarks():
                                                  )
         self.drawSpec = self.mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
 
-    def findFaceLandmark(self, img, draw=False):
+    def findFaceLandmark(self, img, version, draw=False):
+        """
+        version(int): Version 1, 2 or 3.
+            if 1 Face is recropped based on landmarks borders
+            if 2 Face is recropped based on landmarks borders + 5 pixels
+            if 3 Face is not cropped. Only skin detection
+        """
         #to be tuned for mask drawing, but 8% seems ok . I didnot tested in in MSE
         thickness_percent=8
 
@@ -533,10 +539,30 @@ class FaceLandMarks():
                     connections=self.mp_face_mesh.FACEMESH_LIPS,
                     landmark_drawing_spec=None,
                     connection_drawing_spec=drawing_spec)
-                  
-                mask_crop=imgMask[relative_ymin:relative_ymax,relative_xmin:relative_xmax]
-                img_crop=imageBGR[relative_ymin:relative_ymax,relative_xmin:relative_xmax]
-
+                
+                if version==1:
+                    # Recrop face following the landmarks borders
+                    mask_crop=imgMask[relative_ymin:relative_ymax,relative_xmin:relative_xmax]
+                    img_crop=imageBGR[relative_ymin:relative_ymax,relative_xmin:relative_xmax]
+                elif version==2:
+                    # Recrop face 5 pixels out of the landmarks borders
+                    relative_xmin = relative_xmin - 5
+                    if relative_xmin<0: relative_xmin=0
+                    relative_xmax = relative_xmax + 5
+                    if relative_xmax>image_cols+1: relative_xmax=image_cols+1
+                    relative_ymin = relative_ymin - 5
+                    if relative_ymin<0: relative_ymin=0
+                    relative_ymax = relative_ymax + 5 
+                    if relative_ymax>image_rows+1: relative_ymax=image_rows+1 
+                    
+                    mask_crop=imgMask[relative_ymin:relative_ymax,relative_xmin:relative_xmax]
+                    img_crop=imageBGR[relative_ymin:relative_ymax,relative_xmin:relative_xmax]  
+                elif version==3:
+                    # Don't recrop.
+                    mask_crop=imgMask
+                    img_crop=imageBGR                    
+                else:
+                    print(f'version={version} is not a valid option')               
                 if draw:
                     cv2.imshow('img_crop',img_crop)
                     cv2.imshow('mask_crop',mask_crop)
@@ -584,7 +610,7 @@ def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int=64,SHOW:
                     if DEBUG: print(i)
                     frameBGR = framesORIG[i,:,:,:]
                     # FIND FACE AND MASK
-                    frame, mask = detector.findFaceLandmark(frameBGR,draw=False)
+                    frame, mask = detector.findFaceLandmark(frameBGR,version=1,draw=False)
                     #cv2.imshow('face',frame);cv2.imshow('mask',mask)
                     # RESIZE FACE AND MASK
                     frameRESIZED = cv2.resize(frame,(newsize,newsize), interpolation = cv2.INTER_AREA)
@@ -619,7 +645,7 @@ def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int=64,SHOW:
 #%% MAIN
 def main():
     CROP_FACES_FROM_VIDEO = False
-    SKIN_DETECTION_AND_RESIZE_64 = True # 2021/10/29
+    SKIN_DETECTION_AND_RESIZE = True # 2021/10/29
     
     if CROP_FACES_FROM_VIDEO:
          #%% GLOBAL VARIABLES
@@ -640,10 +666,10 @@ def main():
             VIPL.copy_GT_files()
             #VIPL.crop_faces((128,128))
             
-    elif SKIN_DETECTION_AND_RESIZE_64:
+    elif SKIN_DETECTION_AND_RESIZE:
         loadingPath = r'J:\faces\128_128\synchronized\VIPL_npy'
-        savingPath = r'J:\faces\64_64\synchronized\VIPL_npy'
-        newsize=64
+        savingPath = r'J:\faces\32_32\synchronized\VIPL_npy'
+        newsize=32
         SkinDetectionAndResizing(loadingPath,savingPath,newsize,False)
         
         

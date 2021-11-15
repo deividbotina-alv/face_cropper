@@ -20,7 +20,7 @@ import sys
 import cv2
 import copy
 import mediapipe as mp
-
+import argparse
 #%% CLASSES AND FUNCTIONS
 
 def get_number_of_files(path,typefile=''):
@@ -574,7 +574,7 @@ class FaceLandMarks():
             return imageBGR, np.zeros((imageBGR.shape[0],imageBGR.shape[1],3),dtype=np.uint8)
 
 
-def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int=64,SHOW:bool=False):
+def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int,saveskinmask:bool,SHOW:bool=False):
     '''
     Function to take 128x128 synchronized VIPL videos to:
         1) Detect face by landmarks
@@ -627,7 +627,8 @@ def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int=64,SHOW:
                         cv2.imshow('img',img)
                 
                 np.save(join(savingPath,subject,subject+'.npy'),framesRESIZED)
-                np.save(join(savingPath,subject,subject+'_skinmask.npy'),BoolSkinMask)
+                if saveskinmask:
+                    np.save(join(savingPath,subject,subject+'_skinmask.npy'),BoolSkinMask)
                    
             # COPY/PASTE GROUND TRUTH FILE
             try:
@@ -646,6 +647,10 @@ def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int=64,SHOW:
 def main():
     CROP_FACES_FROM_VIDEO = False
     SKIN_DETECTION_AND_RESIZE = True # 2021/10/29
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--save_skin_mask', action='store_true', default=False)
+    args = parser.parse_args()
+    print(f'Saving skin masks (more space in disk needed): {args.save_skin_mask}')
     
     if CROP_FACES_FROM_VIDEO:
          #%% GLOBAL VARIABLES
@@ -667,11 +672,10 @@ def main():
             #VIPL.crop_faces((128,128))
             
     elif SKIN_DETECTION_AND_RESIZE:
-        loadingPath = r'J:\faces\128_128\synchronized\VIPL_npy'
-        savingPath = r'J:\faces\32_32\synchronized\VIPL_npy'
-        newsize=32
-        SkinDetectionAndResizing(loadingPath,savingPath,newsize,False)
-        
+        loadingPath = r'J:\faces\128_128\synchronized\VIPL_npy\Facecascade'
+        savingPath = r'J:\faces\128_128\synchronized\VIPL_npy\MediapipeFromFascascade'
+        newsize=128
+        SkinDetectionAndResizing(loadingPath,savingPath,newsize,args.save_skin_mask,False)
         
         pass
 

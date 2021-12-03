@@ -22,7 +22,7 @@ import glob
 import sys
 import cv2
 import copy
-
+import argparse
 #%% CLASSES AND FUNCTIONS
 
 def get_number_of_files(path,typefile=''):
@@ -398,45 +398,121 @@ def checkGroundTruthFilesInECGFitness(path:str):
                 GTfile = np.load(join(dirpath,folder,'fakePPG.npy'))
                 figure(1),plt.cla(),title(sbj+'_'+folder),plot(time,GTfile),plt.grid(),show()
                 print(sbj+'_'+folder)
-  
+
+def Resizing(loadingPath:str,savingPath:str,newsize:int,saveskinmask:bool, is_YUV:bool,SHOW:bool=False):
+    '''
+    Function to take 128x128 synchronized VIPL videos to:
+        1) Detect face by landmarks
+        2) Create boolean mask BoolSkinMask newsize
+        3) Resize input 128x128 to newsize and also BoolSkinMask
+        4) Copy and paste remaining files without modifications
+    '''
+    # Start utils for face landmark detection and drawing
+    DEBUG = False
+    folders = natsorted([x[0] for x in os.walk(loadingPath)][1:])
+    # Iterate all folders
+    for folder in folders:
+        # CREATE FOLDER PER SUBJECT
+        subject = folder.split(os.path.sep)[-1]
+        print(f'=>{subject}')
+        if not(os.path.exists(join(savingPath,subject))): os.makedirs(join(savingPath,subject))  
+        
+        if len(os.listdir(folder)) == 0: 
+            print('Empty folder')
+        else: # If it is not empty then just do it !
+        
+        
+            # DETECT SKIN, RESIZE AND SAVE FRAMES WITH MASKS
+            try:
+                framesORIG = np.load(join(savingPath,subject,subject+'.npy'))
+            except:
+                framesORIG = np.load(join(folder,subject+'.npy'))
+                framesRESIZED = np.zeros(shape=(framesORIG.shape[0],newsize,newsize,3),dtype=np.uint8)
+                BoolSkinMask = np.zeros(shape=(framesORIG.shape[0],newsize,newsize),dtype=np.bool)
+                for i in range(0,framesORIG.shape[0]):
+                    if DEBUG: print(i)
+                    frameBGR = framesORIG[i,:,:,:]
+                    if is_YUV==True:
+                        frame = cv2.cvtColor(frameBGR, cv2.COLOR_BGR2YUV)
+                    else:
+                        frame = frameBGR
+                        
+                    #cv2.imshow('face',frame);
+                    # RESIZE FACE
+                    frameRESIZED = cv2.resize(frame,(newsize,newsize), interpolation = cv2.INTER_AREA)
+                    #cv2.imshow('faceRESIZED',frameRESIZED);
+                    framesRESIZED[i,:,:,:] = frameRESIZED
+                    
+                    if SHOW:
+                        img = framesRESIZED[i]
+                        cv2.imshow('img',img)
+                
+                np.save(join(savingPath,subject,subject+'.npy'),framesRESIZED)
+                if saveskinmask:
+                    np.save(join(savingPath,subject,subject+'_skinmask.npy'),BoolSkinMask)
+                   
+            # COPY/PASTE GROUND TRUTH FILE
+            try:
+                sh.copy(join(folder,subject+'_gt.npy'),join(savingPath,subject,subject+'_gt.npy'))
+            except:
+                print(f'ERROR savomg {subject}_gt.npy')
+                     
+    print('end')
+    
 
 #%% MAIN
-
-loadingPath = r'J:\Original_Datasets\ECG-Fitness'
-bboxPath = r'J:\Original_Datasets\ECG-Fitness\bbox'
-Subjects = ['00','01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16']
-savingPath = r'J:\faces\128_128\synchronized\ECGFitness'
-SHOW_INDIVIDUAL_PREDICTION = True 
-SHOW_FINAL_PREDICTION = True
-
-checkGroundTruthFilesInECGFitness(loadingPath)
-    
-# CHECK GROUND TRUTH FILES
-# For all subjects
-for sbj in Subjects:
-    for (dirpath, dirnames, filenames) in os.walk(join(loadingPath,sbj)):
-        for folder in dirnames:
+def main():
+    CROP_FACES_FROM_VIDEO = False
+    ONLY_RESIZE = True # 2021/11/23
+    is_YUV = True
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--save_skin_mask', action='store_true', default=False)
+    args = parser.parse_args()
+    print(f'Saving skin masks (more space in disk needed): {args.save_skin_mask}')
+    if CROP_FACES_FROM_VIDEO :
+        loadingPath = r'J:\Original_Datasets\ECG-Fitness'
+        bboxPath = r'J:\Original_Datasets\ECG-Fitness\bbox'
+        Subjects = ['00','01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16']
+        savingPath = r'J:\faces\128_128\synchronized\ECGFitness'
+        SHOW_INDIVIDUAL_PREDICTION = True 
+        SHOW_FINAL_PREDICTION = True
+        
+        checkGroundTruthFilesInECGFitness(loadingPath)
             
-            try:
-                file = np.load(join(dirpath,folder,'fakePPG.npy'))
-                print('Previously saved: '+join(dirpath,folder,'fakePPG.npy'))
-            except:   
-                time,GT_ecg = getECGFromCSVFileECGFitness(join(dirpath,folder),SHOW=False)
-                fakeppg = ECG2PPG_wgan_gp_mimic(ECG2PPGnet,time,GT_ecg,SHOW=False) 
-                # save fakeppg                    
-                np.save(join(dirpath,folder,'fakePPG.npy'),fakeppg.astype(np.float16))
-                print(join(dirpath,folder,'fakePPG.npy'))
+        # CHECK GROUND TRUTH FILES
+        # For all subjects
+        for sbj in Subjects:
+            for (dirpath, dirnames, filenames) in os.walk(join(loadingPath,sbj)):
+                for folder in dirnames:
+                    
+                    try:
+                        file = np.load(join(dirpath,folder,'fakePPG.npy'))
+                        print('Previously saved: '+join(dirpath,folder,'fakePPG.npy'))
+                    except:   
+                        time,GT_ecg = getECGFromCSVFileECGFitness(join(dirpath,folder),SHOW=False)
+                        fakeppg = ECG2PPG_wgan_gp_mimic(ECG2PPGnet,time,GT_ecg,SHOW=False) 
+                        # save fakeppg                    
+                        np.save(join(dirpath,folder,'fakePPG.npy'),fakeppg.astype(np.float16))
+                        print(join(dirpath,folder,'fakePPG.npy'))
+        
+        
+        VIPL = face_cropper_VIPL(loadingPath, savingPath, filespath, SHOW=False)
+        VIPL.find_files()
+        # Test with one subject
+        # Uncomment next line to test one or multiple specific subjetcs
+        # VIPL.datapath = [r'J:\Original_Datasets\VIPL-HR\data\p1\v1\source2']
+        # VIPL.gtpath =  [r'J:\Original_Datasets\VIPL-HR\data\p1\v1\source2']
+        if not(VIPL.same_number_of_files()):
+            print('Error: pathFiles and pathGT must have the same number of files')
+            sys.exit()
+        else:
+            VIPL.copy_GT_files()
+            #VIPL.crop_faces((128,128))
+    elif ONLY_RESIZE:
+        loadingPath = r'J:\faces\128_128\synchronized\ECGFitness_npy'
+        savingPath = r'J:\faces\8_8\synchronized\ECGFitness_npy\YUV'
+        newsize=8
+        Resizing(loadingPath,savingPath,newsize,args.save_skin_mask, is_YUV,False)
 
-
-VIPL = face_cropper_VIPL(loadingPath, savingPath, filespath, SHOW=False)
-VIPL.find_files()
-# Test with one subject
-# Uncomment next line to test one or multiple specific subjetcs
-# VIPL.datapath = [r'J:\Original_Datasets\VIPL-HR\data\p1\v1\source2']
-# VIPL.gtpath =  [r'J:\Original_Datasets\VIPL-HR\data\p1\v1\source2']
-if not(VIPL.same_number_of_files()):
-    print('Error: pathFiles and pathGT must have the same number of files')
-    sys.exit()
-else:
-    VIPL.copy_GT_files()
-    #VIPL.crop_faces((128,128))
+if __name__ == "__main__":
+    main()  

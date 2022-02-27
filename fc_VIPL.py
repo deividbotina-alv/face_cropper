@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import os
 import subprocess
 from os import listdir
-from os.path import join
+from os.path import join, abspath
 import shutil as sh
 from natsort import natsorted
 import glob
@@ -574,12 +574,12 @@ class FaceLandMarks():
             return imageBGR, np.zeros((imageBGR.shape[0],imageBGR.shape[1],3),dtype=np.uint8)
 
 
-def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int,saveskinmask:bool,is_YUV:bool,SHOW:bool=False):
+def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int,saveskinmask:bool,color_channel:str,SHOW:bool=False):
     '''
     Function to take 128x128 synchronized VIPL videos to:
         1) Detect face by landmarks
         2) Create boolean mask BoolSkinMask 128x128
-        3) Resize input 128x128 to 64x64 and also BoolSkinMask
+        3) Resize input 128x128 to newsize and also BoolSkinMask if needed
         4) Copy and paste remaining files without modifications
     '''
     # Start utils for face landmark detection and drawing
@@ -612,8 +612,16 @@ def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int,saveskin
                     frameBGR = framesORIG[i,:,:,:]
                     # FIND FACE AND MASK
                     frame, mask = detector.findFaceLandmark(frameBGR,version=1,draw=False)
-                    if is_YUV:
+                    if color_channel == 'RGB':
+                        frame = frame
+                    elif color_channel == 'YUV':
                         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2YUV)
+                    elif color_channel == 'HSV':
+                        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)                        
+                    elif color_channel == 'Lab':
+                        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2Lab) 
+                    elif color_channel == 'Luv':
+                        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2Luv) 
                     #cv2.imshow('face',frame);cv2.imshow('mask',mask)
                     # RESIZE FACE AND MASK
                     frameRESIZED = cv2.resize(frame,(newsize,newsize), interpolation = cv2.INTER_AREA)
@@ -650,12 +658,15 @@ def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int,saveskin
 def main():
     CROP_FACES_FROM_VIDEO = False
     SKIN_DETECTION_AND_RESIZE = True # 2021/10/29
-    is_YUV = True # 2021/12/01 Save YUV channels instead of RGB
     parser = argparse.ArgumentParser()
     parser.add_argument('--save_skin_mask', action='store_true', default=False)
+    parser.add_argument('-ch', '--color_channel', type=str, choices=['RGB','YUV','HSV','Lab','Luv'], default='RGB', required=True)  # 2022/02/27 Save Color different channels
+    parser.add_argument('--newsize', type=int, choices=[128,64,32,16,8,4,2], default=8) # Only for sweep hyperparameter tuning
+    parser.add_argument('-lp', '--load_path', type=str, required=True)
+    parser.add_argument('-sp', '--save_path', type=str, required=True)    
     args = parser.parse_args()
     print(f'Saving skin masks (more space in disk needed): {args.save_skin_mask}')
-    if is_YUV: print(f'Saving YUV channels instead of RGB')
+    print(f'Saving {args.color_channel} channels')
     
     if CROP_FACES_FROM_VIDEO:
          #%% GLOBAL VARIABLES
@@ -677,10 +688,9 @@ def main():
             #VIPL.crop_faces((128,128))
             
     elif SKIN_DETECTION_AND_RESIZE:
-        loadingPath = r'J:\faces\128_128\synchronized\VIPL_npy\Facecascade'
-        savingPath = r'J:\faces\8_8\synchronized\VIPL_npy\MediapipeFromFascascade\YUV'
-        newsize=8
-        SkinDetectionAndResizing(loadingPath,savingPath,newsize,args.save_skin_mask,is_YUV,False)
+        loadingPath = abspath(args.load_path) #r'J:\faces\128_128\synchronized\VIPL_npy\Facecascade'
+        savingPath = abspath(args.save_path) #r'J:\faces\8_8\synchronized\VIPL_npy\MediapipeFromFascascade\HSV'
+        SkinDetectionAndResizing(loadingPath,savingPath,args.newsize,args.save_skin_mask,args.color_channel,False)
 
 
 if __name__ == "__main__":

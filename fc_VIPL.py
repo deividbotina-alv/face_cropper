@@ -616,6 +616,8 @@ def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int,saveskin
                         frame = frame
                     elif color_channel == 'YUV':
                         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2YUV)
+                    elif color_channel == 'YCrCb':
+                        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2YCrCb)
                     elif color_channel == 'HSV':
                         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)                        
                     elif color_channel == 'Lab':
@@ -640,7 +642,9 @@ def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int,saveskin
                 np.save(join(savingPath,subject,subject+'.npy'),framesRESIZED)
                 if saveskinmask:
                     np.save(join(savingPath,subject,subject+'_skinmask.npy'),BoolSkinMask)
-                   
+                # Release memory
+                del detector; del framesORIG; del framesRESIZED; del BoolSkinMask;del frameBGR; del frame; del frameRESIZED; del maskRESIZED 
+                
             # COPY/PASTE GROUND TRUTH FILE
             try:
                 sh.copy(join(folder,subject+'_gt.txt'),join(savingPath,subject,subject+'_gt.txt'))
@@ -650,23 +654,15 @@ def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int,saveskin
             try:
                 sh.copy(join(folder,subject+'_timestamp.txt'),join(savingPath,subject,subject+'_timestamp.txt'))
             except:
-                print(f'ERROR savomg {subject}_timestamp.txt')                
+                print(f'ERROR savomg {subject}_timestamp.txt')
+                           
          
     print('end')
 
 #%% MAIN
 def main():
     CROP_FACES_FROM_VIDEO = False
-    SKIN_DETECTION_AND_RESIZE = True # 2021/10/29
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--save_skin_mask', action='store_true', default=False)
-    parser.add_argument('-ch', '--color_channel', type=str, choices=['RGB','YUV','HSV','Lab','Luv'], default='RGB', required=True)  # 2022/02/27 Save Color different channels
-    parser.add_argument('--newsize', type=int, choices=[128,64,32,16,8,4,2], default=8) # Only for sweep hyperparameter tuning
-    parser.add_argument('-lp', '--load_path', type=str, required=True)
-    parser.add_argument('-sp', '--save_path', type=str, required=True)    
-    args = parser.parse_args()
-    print(f'Saving skin masks (more space in disk needed): {args.save_skin_mask}')
-    print(f'Saving {args.color_channel} channels')
+    SKIN_DETECTION_AND_RESIZE = True # 2021/10/29-> from faces already cropped
     
     if CROP_FACES_FROM_VIDEO:
          #%% GLOBAL VARIABLES
@@ -688,6 +684,16 @@ def main():
             #VIPL.crop_faces((128,128))
             
     elif SKIN_DETECTION_AND_RESIZE:
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--save_skin_mask', action='store_true', default=False)
+        parser.add_argument('-ch', '--color_channel', type=str, choices=['RGB','YUV','YCrCb','HSV','Lab','Luv'], default='RGB', required=True)  # 2022/02/27 Save Color different channels
+        parser.add_argument('--newsize', type=int, choices=[128,64,32,16,8,4,2], default=8) # Only for sweep hyperparameter tuning
+        parser.add_argument('-lp', '--load_path', type=str, required=True)
+        parser.add_argument('-sp', '--save_path', type=str, required=True)    
+        args = parser.parse_args()
+        print(f'Saving skin masks (more space in disk needed): {args.save_skin_mask}')
+        print(f'Saving {args.color_channel} channels')
+        
         loadingPath = abspath(args.load_path) #r'J:\faces\128_128\synchronized\VIPL_npy\Facecascade'
         savingPath = abspath(args.save_path) #r'J:\faces\8_8\synchronized\VIPL_npy\MediapipeFromFascascade\HSV'
         SkinDetectionAndResizing(loadingPath,savingPath,args.newsize,args.save_skin_mask,args.color_channel,False)

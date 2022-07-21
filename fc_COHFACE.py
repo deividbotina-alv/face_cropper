@@ -1,9 +1,9 @@
 '''
-2022/07/11:
-This cript takes the UBFC-rPPG dataset and cropp the faces, saving them with their
+This cript takes the VIPL-HR dataset and cropp the faces, saving them with their
 respective ground truth files.
-Note: I am using the path J:\\Original_Datasets\\UBFC_DATASET\\DATASET_2 where data has been processed by Simon
-for example, I have the pulseOx_gt.txt ground truth file and the folders vid.avi_faces with faces already cropped.
+2021/10/29:
+    - From 128x128 cropped faces, skin recognition by landmarks
+    - 128x128 resize to 64x64. Also skin maks
 '''
 
 #%% IMPORTS
@@ -21,8 +21,9 @@ import cv2
 import copy
 import mediapipe as mp
 import argparse
-import collections
 from ubfc_functions import detrendsignal, normalize
+import h5py
+from scipy import interpolate
 #%% CLASSES AND FUNCTIONS
 
 class FaceLandMarks():
@@ -215,28 +216,28 @@ class FaceLandMarks():
 
 def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int,saveskinmask:bool,color_channel:str,SHOW:bool=False):
     '''
-    Function to take synchronized UBFC videos to:
+    Function to take 128x128 COHFACE videos to:
         1) Detect face by landmarks
-        2) Create boolean mask BoolSkinMask
-        3) Resize input to newsize and also BoolSkinMask if needed
-        4) Copy and paste remaining files without modifications
+        2) Create boolean mask BoolSkinMask 128x128
+        3) Resize input 128x128 to newsize and also BoolSkinMask if needed
+        4) Copy and paste remaining files like ground truth or similar
     '''
     # Start utils for face landmark detection and drawing
     DEBUG = False
     folders = natsorted([x[0] for x in os.walk(loadingPath)][1:])
-    folders = natsorted([fold for fold in folders if not(fold.endswith('vid.avi_faces'))])#Remove vid.avi_Faces
-    
+    folders = natsorted([x for x in folders if os.path.isfile(join(x,'data.avi'))])
     # Iterate all folders
     for folder in folders:
         # CREATE FOLDER PER SUBJECT
-        subject = folder.split(os.path.sep)[-1]
-        print(f'=>{subject}')
+        subject = folder.split(os.path.sep)[-2]+'_'+folder.split(os.path.sep)[-1]
+        print(f'[SkinDetectionAndResizing]=>{subject}')
         if not(os.path.exists(join(savingPath,subject))): os.makedirs(join(savingPath,subject))  
         
         if len(os.listdir(folder)) == 0: 
             print('Empty folder')
         else: # If it is not empty then just do it !
-
+        
+        
             # DETECT SKIN, RESIZE AND SAVE FRAMES WITH MASKS
             try:
                 framesORIG = np.load(join(savingPath,subject,subject+'.npy'))
@@ -245,7 +246,7 @@ def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int,saveskin
             except:
                 detector = FaceLandMarks()  
                 frames = []
-                video = cv2.VideoCapture(join(folder,'vid.avi'))
+                video = cv2.VideoCapture(join(folder,'data.avi'))
                 ret = True
                 while ret:
                     ret, img = video.read() # read one frame from the 'capture' object; img is (H, W, C)
@@ -254,7 +255,6 @@ def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int,saveskin
                 framesORIG = np.stack(frames, axis=0) # dimensions (T, H, W, C)
                 framesRESIZED = np.zeros(shape=(framesORIG.shape[0],newsize,newsize,3),dtype=np.uint8)
                 BoolSkinMask = np.zeros(shape=(framesORIG.shape[0],newsize,newsize),dtype=np.bool)
-
                 for i in range(0,framesORIG.shape[0]):
                     if DEBUG: print(i)
                     frameBGR = framesORIG[i,:,:,:]
@@ -295,8 +295,23 @@ def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int,saveskin
                 
             # COPY/PASTE GROUND TRUTH FILE
             try:
-                sh.copy(join(folder.split('\\vid.avi_faces')[0],'pulseOx_gt.txt'),join(savingPath,subject,subject+'_gt.txt'))
-                ground_truth = np.loadtxt(join(savingPath,subject,subject+'_gt.txt'))
+                video_fr = 20
+                gt_fr = 256
+                hdf5file = h5py.File(join(folder,'data.hdf5'),'r+') 
+                ground_truth = hdf5file['pulse']
+                # Resampling gt to video fps
+                timeTrace = np.arange(0,len(ground_truth)*(1/gt_fr),(1/gt_fr))#In COHFACE, sampling rate in rppg is 20 hz
+                newtimeTrace = np.arange(0,timeTrace[-1],(1/video_fr))
+                f = interpolate.interp1d(timeTrace, np.asarray(ground_truth))
+                ground_truth = f(newtimeTrace)
+                ground_truth = ground_truth[2:] # remove that initial value which is not good
+                #
+                if framesORIG.shape[0]<len(ground_truth):
+                    # If ground truth is bigger then cut the last frames
+                    ground_truth = ground_truth[0:framesORIG.shape[0]]
+                elif framesORIG.shape[0]>len(ground_truth):
+                    # If the ground truth is smaller just repeat the signal
+                    ground_truth = np.concatenate((ground_truth,ground_truth[0:framesORIG.shape[0]-len(ground_truth)]))
                 # Detrending
                 ground_truth = detrendsignal(ground_truth)
                 ground_truth = normalize(ground_truth)
@@ -315,10 +330,15 @@ def SkinDetectionAndResizing(loadingPath:str,savingPath:str,newsize:int,saveskin
 
 #%% MAIN
 def main():
+
     print('================================================================')
-    print('                FACE CROPPER UBFC-rPPG dataset                  ')
+    print('              Running Skin Detection And Resizing               ')
     print('================================================================') 
-    
+    print('Created: 2022/07/20') 
+    print('Notes: 2022/07/20: Using Mediapipe for face detection, no face tracking.') 
+    print('Notes: 2022/07/20: In COHFACE, sampling rate in rppg is 20 hz.') 
+    print('================================================================') 
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--save_skin_mask', action='store_true', default=False)
     parser.add_argument('-ch', '--color_channel', type=str, choices=['RGB','YUV','YCrCb','HSV','Lab','Luv'], default='RGB', required=True)  # 2022/02/27 Save Color different channels
@@ -326,18 +346,19 @@ def main():
     parser.add_argument('-lp', '--load_path', type=str, required=True)
     parser.add_argument('-sp', '--save_path', type=str, required=True)    
     args = parser.parse_args()
-    
-    """""""""
-    SHOW PARAMETERES CHOOSEN FOR THIS EXPERIMENT
-    """""""""  
+
     for arg in vars(args):
         print(f'{arg} : {getattr(args, arg)}')
     print('================================================================')
-    print('================================================================')     
+    print('================================================================') 
+
+    print(f'[fc_COHFACE]Saving skin masks (more space in disk needed): {args.save_skin_mask}')
+    print(f'[fc_COHFACE]Saving {args.color_channel} channels')
     
-    loadingPath = abspath(args.load_path) #r'J:\faces\128_128\synchronized\VIPL_npy\Facecascade'
-    savingPath = abspath(args.save_path) #r'J:\faces\8_8\synchronized\VIPL_npy\MediapipeFromFascascade\HSV'
-    SkinDetectionAndResizing(loadingPath,savingPath,args.newsize,args.save_skin_mask,args.color_channel,False)    
+    loadingPath = abspath(args.load_path) #r'J:\Original_Datasets\COHFACE'
+    savingPath = abspath(args.save_path) #r'J:\faces\128_128\synchronized\COHFACE_npy\RGB'
+    SkinDetectionAndResizing(loadingPath,savingPath,args.newsize,args.save_skin_mask,args.color_channel,False)
+
 
 if __name__ == "__main__":
     main()  
